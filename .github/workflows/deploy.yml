@@ -1,0 +1,39 @@
+name: Deploy Backend Ventas via AWS SSM
+
+on:
+  push:
+    branches: [ "main" ]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout del código
+      uses: actions/checkout@v3
+
+    - name: Configurar Credenciales de AWS
+      uses: aws-actions/configure-aws-credentials@v2
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+        aws-region: us-east-1
+
+    - name: Ejecutar Despliegue en EC2 vía SSM
+      run: |
+        aws ssm send-command \
+          --instance-ids "${{ secrets.INSTANCE_ID }}" \
+          --document-name "AWS-RunShellScript" \
+          --comment "Desplegando Backend de Ventas" \
+          --parameters 'commands=[
+            "mkdir -p ~/back-ventas",
+            "cd ~/back-ventas",
+            "git config --global --add safe.directory ~/back-ventas",
+            "if [ ! -d \".git\" ]; then git clone https://github.com/${{ github.repository }}.git .; else git pull origin main; fi",
+            "docker build -t backend-ventas .",
+            "docker stop container-ventas || true",
+            "docker rm container-ventas || true",
+            "docker run -d --name container-ventas -p 8080:8080 backend-ventas"
+          ]' \
+          --output text
